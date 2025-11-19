@@ -20,9 +20,13 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo "Building Docker image..."
-                sh """
-                    docker build -t ${ECR_REPO_NAME}:${IMAGE_TAG} .
-                """
+               sh """
+    docker buildx create --use || true
+    docker buildx build --platform linux/amd64 \
+        -t ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} \
+        --push .
+"""
+
             }
         }
 
