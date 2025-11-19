@@ -21,7 +21,7 @@ pipeline {
             steps {
                 echo "Building Docker image..."
                 sh """
-                    docker build -t ${ECR_REPO_NAME}:${IMAGE_TAG} .
+                    docker build --platform=linux/amd64 -t ${ECR_REPO_NAME}:${IMAGE_TAG} .
                 """
             }
         }
