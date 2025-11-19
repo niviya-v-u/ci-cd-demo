@@ -1,15 +1,15 @@
- pipeline {
+pipeline {
     agent any
 
     environment {
         AWS_REGION      = 'ap-south-1'
-        AWS_ACCOUNT_ID  = '108322181673'
+        AWS_ACCOUNT_ID  = '196177110673'
         ECR_REPO_NAME   = 'ci-cd-demo'
         IMAGE_TAG       = "build-${BUILD_NUMBER}"
-        EMAIL_RECIPIENTS = "your_email@gmail.com"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 echo "Cloning repository..."
@@ -26,16 +26,18 @@
             }
         }
 
-        withCredentials([[
-    $class: 'AmazonWebServicesCredentialsBinding',
-    credentialsId: 'aws-ecr-credentials'
-]]) {
-    sh """
-        aws ecr get-login-password --region ${AWS_REGION} | \
-        docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-    """
-}
-
+        stage('Login to ECR') {
+            steps {
+                echo "Logging in to Amazon ECR..."
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-ecr-credentials'
+                ]]) {
+                    sh """
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                    """
+                }
             }
         }
 
@@ -53,7 +55,8 @@
                 sshagent(['ec2-ssh-key']) {
                     sh """
                         ssh -o StrictHostKeyChecking=no ubuntu@43.205.142.131 '
-                            aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com &&
+                            aws ecr get-login-password --region ${AWS_REGION} \
+                                | sudo docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com &&
                             sudo docker pull ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} &&
                             sudo docker stop myapp || true &&
                             sudo docker rm myapp || true &&
@@ -62,6 +65,15 @@
                     """
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "SUCCESS!"
+        }
+        failure {
+            echo "FAILURE!"
         }
     }
 }
