@@ -17,14 +17,16 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                echo "Building Docker image..."
-                sh """
-                    docker build --platform=linux/amd64 -t ${ECR_REPO_NAME}:${IMAGE_TAG} .
-                """
-            }
-        }
+  stage('Build Docker Image') {
+    steps {
+        echo "Building Docker image..."
+        sh """
+            docker build --platform=linux/amd64 -t ${ECR_REPO_NAME}:${IMAGE_TAG} .
+        """
+    }
+}
+
+
 
         stage('Login to AWS ECR') {
             steps {
@@ -41,15 +43,16 @@ pipeline {
             }
         }
 
-        stage('Tag and Push Docker Image') {
-            steps {
-                echo "Tagging and pushing image to ECR..."
-                sh """
-                    docker tag ${ECR_REPO_NAME}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-                    docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-                """
-            }
-        }
+     
+stage('Tag and Push Docker Image') {
+    steps {
+        echo "Tagging and pushing image to ECR..."
+        sh """
+            docker tag ${ECR_REPO_NAME}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+            docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+        """
+    }
+}
 
         stage('Cleanup Local Images') {
             steps {
