@@ -17,14 +17,20 @@ pipeline {
             }
         }
 
-  stage('Build Docker Image') {
+ stage('Build Docker Image') {
     steps {
         echo "Building Docker image..."
         sh """
-            docker build --platform=linux/amd64 -t ${ECR_REPO_NAME}:${IMAGE_TAG} .
+            docker buildx create --name mybuilder --use || true
+            docker buildx inspect --bootstrap
+            docker buildx build \
+                --platform linux/amd64 \
+                -t ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} \
+                --push .
         """
     }
 }
+
 
 
 
