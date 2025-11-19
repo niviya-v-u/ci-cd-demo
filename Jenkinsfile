@@ -1,4 +1,4 @@
-pipeline {
+ pipeline {
     agent any
 
     environment {
@@ -17,27 +17,16 @@ pipeline {
             }
         }
 
- stage('Build Docker Image') {
-    steps {
-        echo "Building Docker image..."
-        sh """
-            docker buildx create --name mybuilder --use || true
-            docker buildx inspect --bootstrap
-            docker buildx build \
-                --platform linux/amd64 \
-                -t ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} \
-                --push .
-        """
-    }
-}
-
-
-
-
-        stage('Login to AWS ECR') {
+        stage('Build Docker Image') {
             steps {
-                echo "Logging in to Amazon ECR..."
-                withCredentials([[
+                echo "Building Docker image..."
+                sh """
+                    docker build -t ${ECR_REPO_NAME}:${IMAGE_TAG} .
+                """
+            }
+        }
+
+        withCredentials([[
     $class: 'AmazonWebServicesCredentialsBinding',
     credentialsId: 'aws-ecr-credentials'
 ]]) {
@@ -46,26 +35,15 @@ pipeline {
         docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
     """
 }
+
             }
         }
 
-     
-stage('Tag and Push Docker Image') {
-    steps {
-        echo "Tagging and pushing image to ECR..."
-        sh """
-            docker tag ${ECR_REPO_NAME}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-            docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-        """
-    }
-}
-
-        stage('Cleanup Local Images') {
+        stage('Tag and Push Image') {
             steps {
-                echo "Cleaning up local Docker images..."
                 sh """
-                    docker rmi ${ECR_REPO_NAME}:${IMAGE_TAG} || true
-                    docker rmi ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} || true
+                    docker tag ${ECR_REPO_NAME}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+                    docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
                 """
             }
         }
@@ -74,7 +52,6 @@ stage('Tag and Push Docker Image') {
             steps {
                 sshagent(['ec2-ssh-key']) {
                     sh """
-                        echo "Deploying container to EC2..."
                         ssh -o StrictHostKeyChecking=no ubuntu@43.205.142.131 '
                             aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com &&
                             sudo docker pull ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} &&
@@ -87,14 +64,4 @@ stage('Tag and Push Docker Image') {
             }
         }
     }
-
-    post {
-        success {
-            echo "SUCCESS!"
-        }
-        failure {
-            echo "FAILURE!"
-        }
-    }
 }
-
