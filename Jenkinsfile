@@ -17,22 +17,9 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
             steps {
-                echo "Building Docker image..."
-               sh """
-    docker buildx create --use || true
-    docker buildx build --platform linux/amd64 \
-        -t ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} \
-        --push .
-"""
-
-            }
-        }
-
-        stage('Login to ECR') {
-            steps {
-                echo "Logging in to Amazon ECR..."
+                echo "Building & pushing Docker image (linux/amd64)..."
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-ecr-credentials'
@@ -40,44 +27,47 @@ pipeline {
                     sh """
                         aws ecr get-login-password --region ${AWS_REGION} | \
                         docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                        
+                        docker buildx create --use || true
+                        
+                        docker buildx build \
+                            --platform linux/amd64 \
+                            -t ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} \
+                            --push .
                     """
                 }
             }
         }
 
-        stage('Tag and Push Image') {
+        stage('Deploy to EC2') {
             steps {
-                sh """
-                    docker tag ${ECR_REPO_NAME}:${IMAGE_TAG} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-                    docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-                """
+                echo "Deploying to EC2..."
+                sshagent(['ec2-ssh-key']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ec2-user@52.66.240.113 '
+                            aws ecr get-login-password --region ${AWS_REGION} \
+                                | sudo docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com &&
+                            
+                            sudo docker pull ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} &&
+
+                            sudo docker stop myapp || true &&
+                            sudo docker rm myapp || true &&
+
+                            sudo docker run -d -p 80:8080 --name myapp \
+                                ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
+                        '
+                    """
+                }
             }
         }
-
-        stage('Deploy to EC2') {
-    steps {
-        sshagent(['ec2-ssh-key']) {
-            sh """
-                ssh -o StrictHostKeyChecking=no ec2-user@52.66.240.113 '
-                    aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com &&
-                    sudo docker pull ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG} &&
-                    sudo docker stop myapp || true &&
-                    sudo docker rm myapp || true &&
-                    sudo docker run -d -p 80:8080 --name myapp ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:${IMAGE_TAG}
-                '
-            """
-        }
-    }
-}
-
     }
 
     post {
         success {
-            echo "SUCCESS!"
+            echo "SUCCESS! Build ${IMAGE_TAG} deployed."
         }
         failure {
-            echo "FAILURE!"
+            echo "FAILURE! Check Jenkins logs."
         }
     }
 }
